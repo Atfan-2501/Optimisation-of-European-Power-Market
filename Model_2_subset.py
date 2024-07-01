@@ -27,7 +27,7 @@ SC = {row['PZ_AGNR']: row['Sortierleistung [Sdg je h]'] for idx, row in df1.iter
 DG = {row['PZ_AGNR']: row['Anzahl Entladebänder (Tore)'] for idx, row in df1.iterrows() if row['PZ_AGNR'] in PZE}
 UC = {row['PZ_AGNR']: row['Entladeleistung je Entladeband (Tor) je Stunde'] for idx, row in df1.iterrows() if row['PZ_AGNR'] in PZE}
 Q = {row['id']: row['Sendungsmenge'] for idx, row in islice(df2.iterrows(), 5)}  # Limiting the size
-SD = {row['id']: pd.to_datetime(row['geplantes_beladeende']) for idx, row in islice(df2.iterrows(), 5)}  # Limiting the size
+SD = {row['id']: pd.to_datetime(row['geplantes_beladeende']) for idx, row in islice(df2.iterrows(), 10)}  # Limiting the size
 
 # Assign a random big number for Deadline, making it start date + 1 day
 Deadline = {row['id']: pd.to_datetime(row['geplantes_beladeende']) + timedelta(days=1) for idx, row in islice(df2.iterrows(), 10)}  # Limiting the size
@@ -40,46 +40,64 @@ Shift_Hours = 11 * 3600  # Duration of the shift in seconds
 
 # Create the model
 model = gp.Model("ParcelCenterOptimization")
+# Step 1: Create a list of pairs
+pairs = list(zip(PZA, PZE))
 
-# Ensure unique pairs of (PZA, PZE)
-unique_pairs = set(zip(PZA, PZE))
+# Step 2: Filter out pairs where PZA == PZE
+filtered_pairs = [(a, b) for a, b in pairs if a != b]
+
+# Step 3: Assign unique values to each unique pair
+unique_pairs = set(filtered_pairs)
+
+# # Output the mapping
+# print(unique_pairs)
 
 # Define the decision variables
-x = model.addVars(unique_pairs, vtype=GRB.BINARY, name="x")
-y = model.addVars(unique_pairs, vtype=GRB.INTEGER, name="y")
+x = model.addVars(unique_pairs, vtype=GRB.BINARY, name="x") # to check whether the direct path is chosen between two pack station?
+y = model.addVars(unique_pairs, vtype=GRB.INTEGER, name="y") # Number of swap bodies/consignment to carry between two pack station
+
+# for i,j in unique_pairs:
+#     print(T[i,j])
 
 # Define the constraints
 
-# Sorting Capacity
+# Sorting Capacity - Add the sorting capacity of each consignment based on the origin, destination and planned date of delivery
 for i in PZA:
     if i in SC:
         model.addConstr(gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) <= SC.get(i, 0) * Shift_Hours, name=f"SortingCapacity_{i}")
     else:
         print(f"Warning: SC does not contain key {i}")
 
-# Unloading Capacity
+# Unloading Capacity - Add the UC of each consignment based on the origin, destination and planned date of delivery
 for j in PZE:
     if j in UC and j in DG:
         model.addConstr(gp.quicksum(y[i, j] for i in PZA if (i, j) in unique_pairs) <= UC.get(j, 0) * DG.get(j, 0) * Shift_Hours, name=f"UnloadingCapacity_{j}")
     else:
         print(f"Warning: UC or DG does not contain key {j}")
 
-# Truck Capacity
-for i, j in unique_pairs:
-    model.addConstr(y[i, j] <= 2 * x[i, j], name=f"TruckCapacity_{i}_{j}")
+# Some discussed constraint and to check for it feasibility
+        # max the number of package delivered from i to j
+        # min tij and max the yij
+        # Sum of all delivered quantities from i to j on particular date < Deadline + 5
+        # Soft constraint, deliver the package irrespective of deadline
+        # Sum of yij with respect to date * 1200(max cap of container) > total quantity to be delivered
 
-# Time Constraints
-for i, j in unique_pairs:
-    for id_ in Q:
-        if i in SC:
-            model.addConstr(T[i, j] + (y[i, j] / SC.get(i, 1)) + LT <= (Deadline[id_] - SD[id_]).total_seconds(), name=f"TimeConstraint_{i}_{j}")
+# # Truck Capacity
+# for i, j in unique_pairs:
+#     model.addConstr(y[i, j] <= 2 * x[i, j], name=f"TruckCapacity_{i}_{j}")
 
-# Flow Conservation
-for j in PZE:
-    model.addConstr(gp.quicksum(y[i, j] for i in PZA if (i, j) in unique_pairs) == Q.get(j, 0), name=f"FlowConservationOut_{j}")
+# # Time Constraints
+# for i, j in unique_pairs:
+#     for id_ in Q:
+#         if i in SC:
+#             model.addConstr(T[i, j] + (y[i, j] / SC.get(i, 1)) + LT <= (Deadline[id_] - SD[id_]).total_seconds(), name=f"TimeConstraint_{i}_{j}")
 
-for i in PZA:
-    model.addConstr(gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) == Q.get(i, 0), name=f"FlowConservationIn_{i}")
+# # Flow Conservation
+# for j in PZE:
+#     model.addConstr(gp.quicksum(y[i, j] for i in PZA if (i, j) in unique_pairs) == Q.get(j, 0), name=f"FlowConservationOut_{j}")
+
+# for i in PZA:
+#     model.addConstr(gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) == Q.get(i, 0), name=f"FlowConservationIn_{i}")
 
 # Example of adding an objective function
 model.setObjective(gp.quicksum(x[i, j] * T[i, j] for i, j in unique_pairs), GRB.MINIMIZE)
@@ -87,12 +105,12 @@ model.setObjective(gp.quicksum(x[i, j] * T[i, j] for i, j in unique_pairs), GRB.
 # Optimize the model
 model.optimize()
 
-# Print the results
-if model.status == GRB.OPTIMAL:
-    print("Optimal solution found")
-    for i in PZA:
-        for j in PZE:
-            if x[i,j].x > 0.5:
-                print(f"Route from {i} to {j} with {y[i,j].x} swap bodies")
-else:
-    print("No optimal solution found")
+# # Print the results
+# if model.status == GRB.OPTIMAL:
+#     print("Optimal solution found")
+#     for i in PZA:
+#         for j in PZE:
+#             if x[i,j].x > 0.5:
+#                 print(f"Route from {i} to {j} with {y[i,j].x} swap bodies")
+# else:
+#     print("No optimal solution found")
