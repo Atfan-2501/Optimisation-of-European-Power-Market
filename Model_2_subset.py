@@ -9,9 +9,9 @@ from itertools import islice
 cwd = os.getcwd()
 
 # Load the Excel files
-excel_1_path = os.path.join("Dataset", 'Inputs.xlsx')
-excel_2_path = os.path.join("Dataset", 'Consignment.xlsx')
-excel_3_path = os.path.join("Dataset", 'Distance.xlsx')
+excel_1_path = os.path.join("Dataset", '1_Inputs.xlsx')
+excel_2_path = os.path.join("Dataset", '2_Consignment.xlsx')
+excel_3_path = os.path.join("Dataset", '3_Distance.xlsx')
 
 # Read the Excel files
 df1 = pd.read_excel(excel_1_path)
@@ -19,8 +19,8 @@ df2 = pd.read_excel(excel_2_path)
 df3 = pd.read_excel(excel_3_path)
 
 # Extract the parameters
-PZA = df3['Origin_ID'].tolist()[:10]  # Limiting the size
-PZE = df3['Destination_ID'].tolist()[:10]  # Limiting the size
+PZA = list(set(df3['Origin_ID'].tolist()[:10]))  # Limiting the size
+PZE = list(set(df3['Destination_ID'].tolist()[:10]))  # Limiting the size
 d = {(row['Origin_ID'], row['Destination_ID']): row['OSRM_distance [m]'] for idx, row in df3.iterrows() if row['Origin_ID'] in PZA and row['Destination_ID'] in PZE}
 T = {(row['Origin_ID'], row['Destination_ID']): row['OSRM_time [sek]'] for idx, row in df3.iterrows() if row['Origin_ID'] in PZA and row['Destination_ID'] in PZE}
 SC = {row['PZ_AGNR']: row['Sortierleistung [Sdg je h]'] for idx, row in df1.iterrows() if row['PZ_AGNR'] in PZA}
@@ -61,7 +61,7 @@ y = model.addVars(unique_pairs, vtype=GRB.INTEGER, name="y") # Number of swap bo
 
 # Define the constraints
 
-# Sorting Capacity - Add the sorting capacity of each consignment based on the origin, destination and planned date of delivery
+# Sorting Capacity - Add the sorting capacity of each consignment based on the origin, destination and geplantes_beladeende
 for i in PZA:
     if i in SC:
         model.addConstr(gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) <= SC.get(i, 0) * Shift_Hours, name=f"SortingCapacity_{i}")
@@ -82,25 +82,52 @@ for j in PZE:
         # Soft constraint, deliver the package irrespective of deadline
         # Sum of yij with respect to date * 1200(max cap of container) > total quantity to be delivered
 
-# # Truck Capacity
-# for i, j in unique_pairs:
-#     model.addConstr(y[i, j] <= 2 * x[i, j], name=f"TruckCapacity_{i}_{j}")
+# Truck Capacity
+for i, j in unique_pairs:
+    model.addConstr(y[i, j] <= 2 * x[i, j], name=f"TruckCapacity_{i}_{j}")
 
-# # Time Constraints
-# for i, j in unique_pairs:
-#     for id_ in Q:
-#         if i in SC:
-#             model.addConstr(T[i, j] + (y[i, j] / SC.get(i, 1)) + LT <= (Deadline[id_] - SD[id_]).total_seconds(), name=f"TimeConstraint_{i}_{j}")
+# Time Constraints
+for i, j in unique_pairs:
+    for id_ in Q:
+        if i in SC:
+            model.addConstr(T[i, j] + (y[i, j] / SC.get(i, 1)) + LT <= (Deadline[id_] - SD[id_]).total_seconds(), name=f"TimeConstraint_{i}_{j}")
 
-# # Flow Conservation
-# for j in PZE:
-#     model.addConstr(gp.quicksum(y[i, j] for i in PZA if (i, j) in unique_pairs) == Q.get(j, 0), name=f"FlowConservationOut_{j}")
+# Maximize the Number of Packages Delivered from i to j:
+for i, j in unique_pairs:
+    model.addConstr(y[i, j] <= 2 * x[i, j], name=f"MaxPackages_{i}_{j}")
 
-# for i in PZA:
-#     model.addConstr(gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) == Q.get(i, 0), name=f"FlowConservationIn_{i}")
 
-# Example of adding an objective function
-model.setObjective(gp.quicksum(x[i, j] * T[i, j] for i, j in unique_pairs), GRB.MINIMIZE)
+# Define slack variables for flow conservation
+slack_in = model.addVars(PZA, vtype=GRB.CONTINUOUS, name="slack_in")
+slack_out = model.addVars(PZE, vtype=GRB.CONTINUOUS, name="slack_out")
+
+# Flow Conservation Constraints with slack variables (if necessary)
+for j in PZE:
+    model.addConstr(
+        gp.quicksum(y[i, j] for i in PZA if (i, j) in unique_pairs) + slack_out[j] == Q.get(j, 0), 
+        name=f"FlowConservationOut_{j}"
+    )
+
+for i in PZA:
+    model.addConstr(
+        gp.quicksum(y[i, j] for j in PZE if (i, j) in unique_pairs) + slack_in[i] == Q.get(i, 0), 
+        name=f"FlowConservationIn_{i}"
+    )
+
+# Ensure non-negativity of y
+for i, j in unique_pairs:
+    model.addConstr(y[i, j] >= 0, name=f"NonNegativity_{i}_{j}")
+
+# Additional Constraints
+# Adjusting Total Quantity Constraint
+for id_ in Q:
+    model.addConstr(
+        gp.quicksum(y[i, j] for i, j in unique_pairs) * 1200 >= Q[id_],
+        name=f"TotalQuantity_{id_}"
+    )
+
+# Objective function: minimize transportation time and maximize consignments delivered
+model.setObjective(gp.quicksum(x[i, j] * T[i, j] for i, j in unique_pairs) - gp.quicksum(y[i, j] for i, j in unique_pairs), GRB.MINIMIZE)
 
 # Optimize the model
 model.optimize()
@@ -114,3 +141,22 @@ model.optimize()
 #                 print(f"Route from {i} to {j} with {y[i,j].x} swap bodies")
 # else:
 #     print("No optimal solution found")
+
+# Output results
+if model.status == GRB.Status.OPTIMAL:
+    print("Optimal solution found")
+    for v in model.getVars():
+        if v.x > 0:
+            print(f'{v.varName}: {v.x}')
+else:
+    print("No optimal solution found")
+
+# Attempt to diagnose infeasibility
+if model.status == GRB.INFEASIBLE:
+    model.computeIIS()
+    model.write("model.ilp")
+
+    print("The following constraints are infeasible:")
+    for c in model.getConstrs():
+        if c.IISConstr:
+            print(f"{c.constrName}")
