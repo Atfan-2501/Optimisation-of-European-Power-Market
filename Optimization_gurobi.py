@@ -1,5 +1,7 @@
 import pandas as pd
 from gurobipy import *
+import time
+from colors import ColorProfiles as clr
 
 class DHL_Optimization:
     """
@@ -91,7 +93,6 @@ class DHL_Optimization:
         ]
 
         self.trucks = range(300)
-        
 
         for (i, j, k, l) in [(i, j, k, l) for (i, j, k) in self.valid_combinations for l in self.trucks]:
             self.X[(i, j, k, l)] = self.model.addVar(vtype=GRB.BINARY, name=f"X_{i}_{j}_{k}_{l}")
@@ -115,15 +116,24 @@ class DHL_Optimization:
         """
         Adds constraints to the Gurobi model to ensure the solution is feasible.
         """
+        print("Adding constraints to the model...")
+        time_saved = time.time()
+        
         # Constraint 1: Each truck can carry at most 2 consignments
         for l in self.trucks:
             self.model.addConstr(quicksum(self.X[(i, j, k, l)] for (i, j, k) in self.valid_combinations) <= 2 * self.Z[l])
+        
+        print(f"1st Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        time_saved = time.time()
         
         # Constraint 2: Consignment can only be released after the latest release time of the consignments
         for (i, j, k) in self.valid_combinations:
             release_time = self.source_df[self.source_df['id'] == k]['geplantes_beladeende'].dt.hour.values[0]  # Convert to hours
             for l in self.trucks:
                 self.model.addConstr(self.T[l] >= release_time * self.X[(i, j, k, l)])
+        
+        print(f"2nd Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        time_saved = time.time()
         
         # Constraint 3: Truck must arrive at the destination within the operational hours
         for (i, j, k) in self.valid_combinations:
@@ -135,9 +145,15 @@ class DHL_Optimization:
                 self.model.addConstr(self.ArrivalTime[(l)] >= start_shift)
                 self.model.addConstr(self.ArrivalTime[(l)] <= end_shift)
         
+        print(f"3rd Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        time_saved = time.time()
+        
         # 4. Each consignment must be assigned to exactly one truck
         for (i, j, k) in self.valid_combinations:
             self.model.addConstr(quicksum(self.X[(i, j, k, l)] for l in self.trucks if (i, j, k) in self.valid_combinations) == 1)
+        
+        print(f"4th Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        time_saved = time.time()
         
         # 6. Sorting Capacity: Each PZE should have enough capacity to accommodate all the incoming trucks
         M=4
@@ -160,19 +176,24 @@ class DHL_Optimization:
                             if (i, j, k) in self.valid_combinations) * self.ArrivalDayBinary[(l, d)] <= sorting_capacity_per_day,
                     name=f"SortingCapacity_{j}_{d}"
                 )
+        
+        print(f"5th Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
                 
     def solve(self):
         """
         Solves the optimization model and prints the solution.
         """
+        print("Solving the optimization problem...")
+        start_time = time.time()
+        
         self.model.optimize()
         if self.model.status in [GRB.OPTIMAL, GRB.TIME_LIMIT, GRB.SUBOPTIMAL]:
             # Extract the data into a DataFrame
             data = []
             for (i, j, k, l) in self.X.keys():
                 if (self.Z[l].X == 1 ) and (self.X[i,j,k,l].X == 1.0):
-                    start_shift = self.destination_df[self.destination_df['Destination_ID'] == j]['Start of shift'].values[0]
-                    end_shift = self.destination_df[self.destination_df['Destination_ID'] == j]['End of lay-on'].values[0]
+                    start_shift = self.destination_df[self.destination_df['PZA_GNR'] == j]['Schichtbeginn'].values[0]
+                    end_shift = self.destination_df[self.destination_df['PZA_GNR'] == j]['Auflegeende (=Sortierschluss/ PZE Sorter Cutoff)'].values[0]
                     travel_time = self.trucking_df[(self.trucking_df['Origin_ID'] == i) & (self.trucking_df['Destination_ID'] == j)]['OSRM_time [sek]'].values[0] / 3600
                     data.append({
                         'Origin(PZA)': i,
@@ -189,12 +210,15 @@ class DHL_Optimization:
             pd.DataFrame(data).to_csv("output/output.csv")
         else:
             print("No optimal solution found.")
+        
+        print(f"Optimization completed in {time.time() - start_time} seconds.")
 
 def main():
     """
     The main function to create an instance of DHL_Optimization, read data, normalize shift times,
     initialize the model, add constraints, and solve the optimization problem.
     """
+    print(f"{clr.BOLD}*** Welcome to Optimizing Package Center Operations Insight ***{clr.ENDC}")
     optimizer = DHL_Optimization()
     optimizer.read_data()
     optimizer.normalize_shift_times()
