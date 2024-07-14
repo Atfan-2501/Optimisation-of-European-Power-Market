@@ -1,3 +1,6 @@
-pandas,
-openpyxl,
-gurobipy
+pandas;
+openpyxl;
+gurobipy;
+streamlit;
+folium;
+streamlit_folium
