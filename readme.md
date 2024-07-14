@@ -58,12 +58,12 @@ Color class mainly used in this project for highlighting keywords in the output
 
 **5. requirements.txt**
 Lists the dependencies required for the project:
-    pandas
-    openpyxl
-    gurobipy
-    streamlit
-    folium
-    streamlit_folium
+- pandas
+- openpyxl
+- gurobipy
+- streamlit
+- folium
+- streamlit_folium
 
 ### How to Run
 
