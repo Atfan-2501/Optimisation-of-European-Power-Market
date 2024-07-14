@@ -89,9 +89,9 @@ To run the Streamlit app, use the following command:
 
 **Interactive Output**
 The Streamlit app provides the following interactive outputs:
-    - *Map Visualization:* Displays the routes of the trucks from origins to destinations using Folium.
-    - *Summary Statistics:* Shows key statistics about the optimization results, such as total cost, number of consignments assigned, and truck utilization.
-    - *Filters and Controls:* Allows users to filter results based on specific criteria and adjust visualization settings.
+- *Map Visualization:* Displays the routes of the trucks from origins to destinations using Folium.
+- *Summary Statistics:* Shows key statistics about the optimization results, such as total cost, number of consignments assigned, and truck utilization.
+- *Filters and Controls:* Allows users to filter results based on specific criteria and adjust visualization settings.
 
 ### Usage
 - **Normalization:** Adjusts the data to ensure consistency and compatibility with the model.
