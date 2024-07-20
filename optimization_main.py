@@ -36,6 +36,10 @@ def main():
             trucking_df = pd.read_excel(default_trucking_path)
     else:
         trucking_df = pd.read_excel(default_trucking_path)
+        try:
+            trucking_df.drop(['Unnamed: 12','Note: OSRM time = pure driving time without breaks, …'], axis=1, inplace=True)
+        except Exception:
+            pass
 
     # Initialize the Class
     optimizer = DHL_Optimization()

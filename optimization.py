@@ -106,7 +106,7 @@ class DHL_Optimization:
         for l in self.trucks:
             self.model.addConstr(quicksum(self.X[(i, j, k, l)] for (i, j, k) in self.valid_combinations) <= 2 * self.Z[l])
         
-        print(f"1st Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        print(f"1st Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
         st.write(f"1st Constraint took {time.time() - time_saved:.2f} seconds.")
         time_saved = time.time()
 
@@ -117,7 +117,7 @@ class DHL_Optimization:
             for l in self.trucks:
                 self.model.addConstr(self.T[l] >= release_time * self.X[(i, j, k, l)])
         
-        print(f"2nd Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        print(f"2nd Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
         st.write(f"2nd Constraint took {time.time() - time_saved:.2f} seconds.")
         time_saved = time.time()
         
@@ -131,7 +131,7 @@ class DHL_Optimization:
                 self.model.addConstr(self.ArrivalTime[(l)] >= start_shift)
                 self.model.addConstr(self.ArrivalTime[(l)] <= end_shift)
         
-        print(f"3rd Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        print(f"3rd Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
         st.write(f"3rd Constraint took {time.time() - time_saved:.2f} seconds.")
         time_saved = time.time()
         
@@ -139,8 +139,8 @@ class DHL_Optimization:
         for (i, j, k) in self.valid_combinations:
             self.model.addConstr(quicksum(self.X[(i, j, k, l)]*self.Z[(l)] for l in self.trucks if (i, j, k) in self.valid_combinations) == 1)
         
-        print(f"4th Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
-        st.write(f"4th Constraint Model took {time.time() - time_saved:.2f} seconds.")
+        print(f"4th Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        st.write(f"4th Constraint took {time.time() - time_saved:.2f} seconds.")
         time_saved = time.time()
         
         # 5. Sorting capacity constraint for each truck arriving at a package center
@@ -157,8 +157,8 @@ class DHL_Optimization:
                     name=f"SortingCapacity_{j}_{d}"
                 )
         
-        print(f"5th Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
-        st.write(f"5th Constraint Model took {time.time() - time_saved:.2f} seconds.")
+        print(f"5th Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        st.write(f"5th Constraint took {time.time() - time_saved:.2f} seconds.")
         time_saved = time.time()
         
         # 6. Assigning arrival day to each used truck            
@@ -168,8 +168,8 @@ class DHL_Optimization:
                 name = f'Assigning Arrival Day to each used truck'
                 )
             
-        print(f"6th Constraint Model took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
-        st.write(f"6th Constraint Model took {time.time() - time_saved:.2f} seconds.")
+        print(f"6th Constraint took {clr.OKYELLOW}{time.time() - time_saved}{clr.ENDC} seconds.")
+        st.write(f"6th Constraint took {time.time() - time_saved:.2f} seconds.")
                 
     def solve(self):
         """
