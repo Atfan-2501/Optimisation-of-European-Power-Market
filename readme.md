@@ -101,6 +101,7 @@ The Streamlit app provides the following interactive outputs:
 - **Visualization:** Presents the results using Streamlit and Folium for easy interpretation.
 
 ### Contributors
-**Atfan Deshmukh - @atfan.deshmukh25**
-**Harshvardhan Kanthode - @harshvardhankanthode99**
-**Praveen Kumar Ojha - @ojha.praveenk**
+-**Atfan Deshmukh - @atfan.deshmukh25**
+-**Harshvardhan Kanthode - @harshvardhankanthode99**
+-**Praveen Kumar Ojha - @ojha.praveenk**
+-**Vinaykumar Ammati**
